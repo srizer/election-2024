@@ -1,1 +1,1 @@
-trying to see if this pushes with the proper github account
+Real-time dashboard for the 2024 presidential election results in Bucks County, Pennsylvania.
