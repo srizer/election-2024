@@ -10,13 +10,21 @@ def filter_contest(df, column, candidates = []):
 def pivot(df, index, coulmn, value):
     return pd.pivot(df, index=index, columns=coulmn, values=value).rename_axis(columns=None).reset_index() # figure out how to keep voter turnout
 
+def create_lead_text(lead):
+    if lead > 0:
+        return '<extra><span style="color:blue"><h1>+' + str(round(lead)) + "</h1></span></extra>"
+    elif lead < 0:
+        return '<extra><span style="color:red"><h1>+' + str(round(lead) * -1) + "</h1></span></extra>"
+    else:
+        return '<extra><span style="color:red"><h1>Tied</h1></span></extra>'
+
 # df, precinct, a_votes, a_pct, b_votes, b_pct, lead
-# do spacing math
-def create_hover_text(df, precinct, a_votes, a_pct, b_votes, b_pct):
-    return ("<b>" + df[precinct] + 
-            "</b><br />Brian Fitzpatrick: " + df[a_votes].astype(str) + " <b>" + df[a_pct].round(0).astype(int).astype(str) + "%" +
-            "</b><br />Mark Houck:        " + df[b_votes].astype(str) + " <b>" + df[b_pct].round(0).astype(int).astype(str) + "%" +
-            "<extra></extra>")
+def create_hover_text(df, precinct, lead, candidates = []):
+    text = '<span style="text-align:center;"><b>' + df[precinct] + "</b><br /><br />"
+    for votes, pct in candidates:
+        text += '<span style="display: block;float:right;">' + votes + '<span style="display:block;">' + df[votes].astype(str) + " <b>" + df[pct].round(0).astype(int).astype(str) + "%" + "</b></span></span><br />"    
+    text += df[lead]
+    return text
 
 #common typos:
 #    - "# " instead of "#"
@@ -43,14 +51,15 @@ cleaned["Total"] = cleaned.sum(axis=1)
 cleaned["Fitzpatrick Percentage"] = (cleaned["Brian Fitzpatrick"] / cleaned["Total"]) * 100
 cleaned["Houck Percentage"] = (cleaned["Mark Houck"] / cleaned["Total"]) * 100
 cleaned["Fitzpatrick Lead"] = (cleaned["Fitzpatrick Percentage"] - cleaned["Houck Percentage"])
+cleaned["Clean Lead"] = cleaned["Fitzpatrick Lead"].apply(create_lead_text)
 cleaned["hover"] = create_hover_text(
                         cleaned,
                         "nameplace",
-                        "Brian Fitzpatrick",
-                        "Fitzpatrick Percentage",
-                        "Mark Houck",
-                        "Houck Percentage",
-                        # "Fitzpatrick Lead"
+                        "Clean Lead",
+                        [
+                            ( "Brian Fitzpatrick", "Fitzpatrick Percentage" ),
+                            ( "Mark Houck", "Houck Percentage" )
+                        ]                        
                     )
 
 def display_choropleth():
@@ -77,7 +86,7 @@ app = Dash(__name__)
 
 app.layout = html.Div([
     html.H1('Republican Primary for Congress in Bucks County'),
-    dcc.Graph(figure=display_choropleth(), style={'width': '90vw', 'height': '90vh'}),
+    dcc.Graph(figure=display_choropleth(), style={'width': '90vw', 'height': '90vh'}),  
 ])
 
 app.run_server(debug=True)
