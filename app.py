@@ -89,4 +89,8 @@ app.layout = html.Div([
     dcc.Graph(figure=display_choropleth(), style={'width': '90vw', 'height': '90vh'}),  
 ])
 
-app.run_server(debug=True)
+# app.run_server(debug=True)
+server = app.server
+
+if __name__ == '__main__':
+    app.run(debug=True)
