@@ -2,7 +2,7 @@ from dash import Dash, dcc, html
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import json
+import urllib.request, json
 
 def filter_contest(df, column, candidates = []):
     return df[df[column].isin(candidates)]
@@ -18,11 +18,10 @@ def create_lead_text(lead):
     else:
         return '<extra><span style="color:red"><h1>Tied</h1></span></extra>'
 
-# df, precinct, a_votes, a_pct, b_votes, b_pct, lead
 def create_hover_text(df, precinct, lead, candidates = []):
     text = '<span style="text-align:center;"><b>' + df[precinct] + "</b><br /><br />"
     for votes, pct in candidates:
-        text += '<span style="display: block;float:right;">' + votes + '<span style="display:block;">' + df[votes].astype(str) + " <b>" + df[pct].round(0).astype(int).astype(str) + "%" + "</b></span></span><br />"    
+        text += '<span style="display: block;float:right;">' + votes + ' <span style="display:block;">' + df[votes].astype(str) + " <b>" + df[pct].round(0).astype(int).astype(str) + "%" + "</b></span></span><br />"    
     text += df[lead]
     return text
 
@@ -34,9 +33,10 @@ def fix_typos(df, column, old, new):
     df[column] = df[column].str.replace(old, new)
     return df
 
-with open("data\Bucks_County_Voting_Precincts_2024.geojson") as f:
-    precincts = json.load(f)
-raw_df = pd.read_csv("data\Precincts_17(1).csv", skiprows=[0, 1])
+# make these env vars or something idk
+with urllib.request.urlopen("https://gist.githubusercontent.com/srizer/c26b7fb3c34546ee4d3b9a71bdefced7/raw/09ade6ce26624d63ce8216d9fba82e0cd26f14f4/Bucks_County_Voting_Precincts_2024.geojson") as url:
+    precincts = json.load(url)
+raw_df = pd.read_csv("https://gist.githubusercontent.com/srizer/5280257d7a6ad8be2f3a8e85524d74a0/raw/d9039edf9d5e3797f4094ed20729e1cc691a258c/Precincts_17(1).csv", skiprows=[0, 1])
 
 cleaned = (
             raw_df.pipe(filter_contest, "Contest Name", ["Representative in Congress (Rep)"])
@@ -89,7 +89,6 @@ app.layout = html.Div([
     dcc.Graph(figure=display_choropleth(), style={'width': '90vw', 'height': '90vh'}),  
 ])
 
-# app.run_server(debug=True)
 server = app.server
 
 if __name__ == '__main__':
