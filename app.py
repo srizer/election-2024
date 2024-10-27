@@ -69,7 +69,7 @@ def display_choropleth():
             locations=cleaned["nameplace"],
             z=cleaned["Fitzpatrick Lead"],
             featureidkey="properties.nameplace",
-            colorscale=px.colors.diverging.RdBu,
+            colorscale=px.colors.diverging.BrBG,
             autocolorscale=False,
             zmid=0,
             hovertemplate=cleaned["hover"],            
