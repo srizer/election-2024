@@ -1,4 +1,5 @@
 from dash import Dash, dcc, html
+import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -12,23 +13,27 @@ def pivot(df, index, coulmn, value):
 
 def create_lead_text(lead):
     if lead > 0:
-        return '<extra><span style="color:blue"><h1>+' + str(round(lead)) + "</h1></span></extra>"
+        return '<br /><span style="color:blue;"><b>Fitzpatrick +' + str(round(lead)) + "</b></span></span><extra></extra>"
     elif lead < 0:
-        return '<extra><span style="color:red"><h1>+' + str(round(lead) * -1) + "</h1></span></extra>"
+        return '<br /><span style="color:red;"><b>Houck +' + str(round(lead) * -1) + "</b></span></span><extra></extra>"
     else:
-        return '<extra><span style="color:red"><h1>Tied</h1></span></extra>'
+        return '<br /><span style="color:black;"><b>Tied</b></span></span><extra></extra>'
+    
+def create_spacing(num):
+    return " " * num
 
 def create_hover_text(df, precinct, lead, candidates = []):
-    text = '<span style="text-align:center;"><b>' + df[precinct] + "</b><br /><br />"
-    for votes, pct in candidates:
-        text += '<span style="display: block;float:right;">' + votes + ' <span style="display:block;">' + df[votes].astype(str) + " <b>" + df[pct].round(0).astype(int).astype(str) + "%" + "</b></span></span><br />"    
+    text = ""
+    text += '<br /><span style="font-family: Overpass, monospace; color:black;"><b>' + df[precinct] + "</b><br /><br />"
+    for votes, pct, space in candidates:
+        text += votes + space + df[votes].astype(str) + " <b>" + df[pct].round(0).astype(int).astype(str) + "%" + "</b><br />"
     text += df[lead]
     return text
 
-#common typos:
-#    - "# " instead of "#"
-#    - "  " instead of " "
-#    - "Boro" instead of "Borough" (EXCEPT DOYLESTOWN)
+# common typos:
+#     - "# " instead of "#"
+#     - "  " instead of " "
+#     - "Boro" instead of "Borough" (EXCEPT DOYLESTOWN)
 def fix_typos(df, column, old, new):
     df[column] = df[column].str.replace(old, new)
     return df
@@ -44,49 +49,89 @@ cleaned = (
             .pipe(fix_typos, "nameplace", "# ", "#")
             .pipe(fix_typos, "nameplace", "  ", " ")
             .pipe(fix_typos, "nameplace", "Boro", "Borough")
-          )
+        )
 
-#figure out how to put this in the pipe block?
+bins = [-np.inf, -50, -25, -10, 0, 10, 25, 50, np.inf]
+labels = ["Houck >50%", "Houck 25-50%", "Houck 10-25%", "Houck 0-10%", "Fitzpatrick 0-10%", "Fitzpatrick 10-25%", "Fitzpatrick 25-50%", "Fitzpatrick >50%"]
+color_scale = ["#c93135", "#db7171", "#eaa9a9", "#fce0e0", "#ceeafd", "#92bde0", "#5295cc", "#1375b7"]
+pairs = dict(zip(labels, color_scale))
+
+# figure out how to put this in the pipe block?
+# also this is disgusting code lol i should have used js
 cleaned["Total"] = cleaned.sum(axis=1)
 cleaned["Fitzpatrick Percentage"] = (cleaned["Brian Fitzpatrick"] / cleaned["Total"]) * 100
 cleaned["Houck Percentage"] = (cleaned["Mark Houck"] / cleaned["Total"]) * 100
 cleaned["Fitzpatrick Lead"] = (cleaned["Fitzpatrick Percentage"] - cleaned["Houck Percentage"])
+cleaned["Binned Lead"] = pd.cut(cleaned["Fitzpatrick Lead"], bins=bins, labels=labels)
 cleaned["Clean Lead"] = cleaned["Fitzpatrick Lead"].apply(create_lead_text)
+cleaned["Digit Difference"] = 11 + (cleaned["Brian Fitzpatrick"].astype(str).str.len() - cleaned["Mark Houck"].astype(str).str.len()).astype(int)
+cleaned["Space Padding"] = cleaned["Digit Difference"].apply(create_spacing)
 cleaned["hover"] = create_hover_text(
                         cleaned,
                         "nameplace",
                         "Clean Lead",
                         [
-                            ( "Brian Fitzpatrick", "Fitzpatrick Percentage" ),
-                            ( "Mark Houck", "Houck Percentage" )
+                            ( "Brian Fitzpatrick", "Fitzpatrick Percentage", "    " ),
+                            ( "Mark Houck", "Houck Percentage",  cleaned["Space Padding"])
                         ]                        
                     )
 
-def display_choropleth():
+def display_barchart(df, a, b):
+    a_total = df[a].sum()
+    b_total = df[b].sum()
     fig = go.Figure(
-        data=go.Choropleth(
-            geojson=precincts,
-            locations=cleaned["nameplace"],
-            z=cleaned["Fitzpatrick Lead"],
-            featureidkey="properties.nameplace",
-            colorscale=px.colors.diverging.BrBG,
-            autocolorscale=False,
-            zmid=0,
-            hovertemplate=cleaned["hover"],            
-            marker_line_color='white',
-            colorbar_title="Fitzpatrick Lead"
+        go.Bar(
+            x=[a, b],
+            y=[a_total, b_total]
         )
     )
-    fig.update_geos(fitbounds="locations", visible=False)
-    fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
-    fig.update_layout(hoverlabel=dict(bgcolor="white"))
     return fig
 
-app = Dash(__name__)
+def display_choropleth(df, z):
+    fig = px.choropleth_map(
+        df,
+        geojson=precincts,
+        locations=df["nameplace"],
+        color=df[z],
+        color_discrete_map=pairs,
+        featureidkey="properties.nameplace",
+        map_style="carto-positron",
+        center={ "lat": 40.309659650050946, "lon": -75.11666494467029 },
+        zoom=9.5,
+        hover_data={ "Binned Lead": False, "nameplace": False, "hover": True },
+        # hover_name=" "
+    )
+    fig.update_geos(fitbounds="locations", visible=False)
+    fig.update_layout(hovermode="x")
+    fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})    
+    fig.update_layout(hoverlabel=dict(bgcolor="white"))
+    fig.update_layout(
+        hoverlabel=dict(
+            font_color="white"  # Hack to compensate for inability to remove "hover=" from hover
+        )
+    )
+    fig.update_layout(
+        legend_title_text="Candidate Lead",
+        legend=dict(
+            font=dict(
+                family="Overpass, monospace",
+                size=18,
+                color="black"
+            )
+        )
+    )
+    return fig
+
+app = Dash(__name__, external_stylesheets=['assets/style.css'])
 
 app.layout = html.Div([
     html.H1('Republican Primary for Congress in Bucks County'),
-    dcc.Graph(figure=display_choropleth(), style={'width': '90vw', 'height': '90vh'}),  
+    html.Div([
+        dcc.Graph(figure=display_barchart(cleaned, "Brian Fitzpatrick", "Mark Houck"), config={'displayModeBar': False})
+    ], style={'width': '40%', 'display': 'inline-block'}),
+    html.Div([
+        dcc.Graph(figure=display_choropleth(cleaned, "Binned Lead"), style={'height': '90vh'}, config={'displayModeBar': False}),
+    ], style={'width': '60%', 'display': 'inline-block', 'padding': '0 20'})     
 ])
 
 server = app.server
